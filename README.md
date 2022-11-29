@@ -1,14 +1,8 @@
-# App name
+# ExcelJs
 
-[brief description of the app]
+티켓 엑셀 데이터 가공을 위한 간단한 스크립트
 
-### The following information is displayed:
+순수 Js로 엑셀 사용법 샘플로 활용 가능
 
-* info1
-* info2
-* info3
-
-Please submit bug reports to [Insert Link](). Pull requests are welcome.
-
-### Screenshot(s):
-[put your screenshots down here.]
+https://seokbong.tistory.com/
+(엑셀만 보려고 하면 블로그 참조가 더 빠르다!)
