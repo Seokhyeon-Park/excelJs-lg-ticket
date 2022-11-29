@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <!--   See Using Zendesk Garden:
+    https://developer.zendesk.com/apps/docs/developer-guide/setup#using-zendesk-garden
+    https://garden.zendesk.com/css-components/bedrock/
+    https://garden.zendesk.com/css-components/utilities/typography/
+   -->
+    <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/combine/npm/@zendeskgarden/css-bedrock@7.0.21,npm/@zendeskgarden/css-utilities@4.3.0">
+    <style>
+        button, label {
+            margin-top: 8px;
+            margin-left: 8px;
+            font-weight: bold;
+        }
+
+        #writeButton {
+            background-color: orange;
+            border-color: orange;
+            border-radius: 15px;
+            width: 100px;
+        }
+
+        #mainButton {
+            background-color: orange;
+            border-color: orange;
+            border-radius: 15px;
+            width: 100px;
+        }
+
+        #readButton, #logReadButton {
+            background-color: pink;
+            border-color: pink;
+            border-radius: 15px;
+            width: 100px;
+        }
+    </style>
+</head>
+
+<body>
+    <label class="mt"> 엑셀 가공 </label><br>
+    <label>파일명 : </label><input type="text" name="" id="fileName">
+    <button id="readButton">데이터 넣기</button>
+    <br>
+    <button id="mainButton">데이터 가공</button>
+    <button id="writeButton">데이터 받기</button>
+    <br>
+    <!-- <label class="mt"> 로그 가공 </label><br>
+    <label>파일명 : </label><input type="text" name="" id="logFileName">
+    <button id="logReadButton">데이터 넣기</button> -->
+    <br>
+    <script src="https://static.zdassets.com/zendesk_app_framework_sdk/2.0/zaf_sdk.min.js"></script>
+    <script src="https://code.jquery.com/jquery-latest.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/1.3.8/FileSaver.min.js"></script> -->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.core.min.js" integrity="sha512-UhlYw//T419BPq/emC5xSZzkjjreRfN3426517rfsg/XIEC02ggQBb680V0VvP+zaDZ78zqse3rqnnI5EJ6rxA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script> -->
+
+    <!-- SCRIPT -->
+    <script>
+        // Initialise Apps framework client. See also:
+        // https://developer.zendesk.com/apps/docs/developer-guide/getting_started
+        var client = ZAFClient.init();
+        let orignal;
+        let create = new Array();
+        let deleteForm = new Array();
+        let update = new Array();
+        let fileNameGlobal;
+
+        let chkRxTicketsCount = 0;
+        let allTickets = new Array();
+        let ticketInfo = new Array();
+        let allIds = new Array();
+        let current = 0;
+        let max = 0;
+
+        const division = (data, cut) => {
+            const len = data.length;
+            max = data.length;
+            const divide = Math.floor(len / cut) + (Math.floor(len % cut) > 0 ? 1 : 0);
+            let newArr = new Array();
+
+            for (let cnt = 0; cnt <= divide; cnt++) { newArr.push(data.splice(0, cut)); }
+
+            console.log("==");
+            console.log("총 티켓 갯수 : ", len, ` (${divide})`);
+            console.log("==");
+
+            return newArr;
+        }
+
+        const loopTickets = async (tickets) => {
+            for (let ticket of tickets) {
+                let filtered = ticket;
+                const ids = ticket.toString();
+                if (ids == null || ids == '') { return; }
+                const apiRes = await client.request(`/api/v2/tickets/show_many?ids=${ids}`);
+                allTickets = allTickets.concat(apiRes.tickets);
+
+                // 카운트
+                current = current + apiRes.count;
+                console.log(`${apiRes.count}/${ticket.length} (rx/tx), ${current}/${max}(total rx/tx)`);
+            }
+        }
+        
+        const excelRead = async () => {
+            console.log("::FileRead::");
+            // 1. 파일 불러오기
+            const dir = './';
+            const fileName = document.querySelector('#fileName').value;
+            fileNameGlobal = fileName;
+            const extension = '.xls';
+            const inputFileName = dir + fileName + extension;
+
+            const res = await fetch(inputFileName);
+            const buffer = await res.arrayBuffer();
+            // 2. workbook 생성
+            const wb = XLSX.read(buffer, {type: 'array'});
+            // 3. 첫 번째 시트 불러오기
+            let sheet = wb.Sheets[wb.SheetNames[0]];
+            // 4. 첫 번째 시트의 row 들고오기
+            const rows = XLSX.utils.sheet_to_row_object_array(sheet);
+            console.log("::rows::", rows);
+            orignal = rows;
+            // row.TICKETID : row.컬럼이름
+            for(let row of rows) { allIds.push(row.TICKETID); }
+            console.log("::FileRead DONE::");
+        }
+
+        const excelWriteList = async () => {
+            console.log("@create.length : ", create.length);
+            console.log("@update.length : ", update.length);
+            if(create.length > 0) { await excelWrite(create, 'create'); }
+            if(deleteForm.length > 0) { await excelWrite(deleteForm, 'delete'); }
+            if(update.length > 0) { await excelWrite(update, 'update'); }
+        }
+
+        const excelWrite = async (data, name) => {
+            console.log("::FileWrite::");
+            // 1. workbook 생성
+            let wb = XLSX.utils.book_new();
+            // 2. 시트 만들기
+            let sheet = XLSX.utils.json_to_sheet(data);
+            // 3. workbook에 시트 설정
+            XLSX.utils.book_append_sheet(wb, sheet, 'sheet1');
+            // 4. excel 파일 만들기
+            let excelWrite = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
+            // 5. 파일 내보내기
+            XLSX.writeFile(wb, `${fileNameGlobal}-${name}.xlsx`, { compression: true });
+            console.log("::FileWrite DONE::");
+        }
+
+        const getTicketInfo = async (tickets) => {
+            // 처리된 티켓
+            for (const ticket of tickets) {
+                for (let ind in orignal) {
+                    if (orignal[ind].TICKETID == ticket.id) {
+                        orignal[ind].STATUS = ticket.status;
+                        if (orignal[ind].STATUS == 'closed') {
+                            create.push(orignal[ind]);
+                            deleteForm.push({ ticketId:orignal[ind].TICKETID });
+                        } else if (orignal[ind].STATUS == '' || orignal[ind].STATUS == null) {
+                            // console.log("DELETED");
+                        } else {
+                            update.push(orignal[ind]);
+                        }
+                    }
+                }
+            }
+
+            console.log("::TIKET DONE!::");
+        }
+
+        const main = async () => {
+            const tickets = division(allIds, 100);
+            await loopTickets(tickets);
+            await getTicketInfo(allTickets);
+
+            // 처리 티켓 수 / 총 티켓 수
+            console.log("current/max : ", current, " / ", max);
+        }
+
+        // EVENT ===========
+        const mainButton = document.querySelector('#mainButton');
+        const readButton = document.querySelector('#readButton');
+        const writeButton = document.querySelector('#writeButton');
+        mainButton.addEventListener('click', main);
+        readButton.addEventListener('click', excelRead);
+        writeButton.addEventListener('click', excelWriteList);
+        // ==
+</script>
+</body>
+
+</html>
